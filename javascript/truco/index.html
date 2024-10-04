@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0"
+    />
+    <title>Truco Argentino</title>
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        margin: 0;
+        display: grid;
+        padding: 0;
+        place-content: center;
+        height: 100vh;
+        font-family: Arial;
+      }
+
+      canvas {
+        background: no-repeat center / cover url('assets/fondo.webp');
+      }
+
+      div {
+        width: 100%;
+        display: flex;
+        justify-content: space-between;
+      }
+
+      span {
+        font-size: 20px;
+      }
+    </style>
+
+    <script type="module">
+      const $canvas = document.querySelector('canvas');
+      const context = canvas.getContext('2d');
+
+      const canvasRect = $canvas.getBoundingClientRect();
+
+      const $playerScore = document.querySelector('#player-score');
+      const $botScore = document.querySelector('#bot-score');
+
+      // CONSTANTS
+      const PALOS = {
+        ESPADA: 'espada',
+        BASTO: 'basto',
+        ORO: 'oro',
+        COPA: 'copa',
+      };
+      // tuple(palo, numero, valor envido, valor de truco)
+      const CARDS = [
+        { '1E': [PALOS.ESPADA, 1, 11, 14] },
+        { '1B': [PALOS.BASTO, 1, 11, 13] },
+        { '7E': [PALOS.ESPADA, 7, 17, 12] },
+        { '7O': [PALOS.ORO, 7, 17, 11] },
+        { '3E': [PALOS.ESPADA, 3, 13, 10] },
+        { '3B': [PALOS.BASTO, 3, 13, 10] },
+        { '3O': [PALOS.ORO, 3, 13, 10] },
+        { '3C': [PALOS.COPA, 3, 13, 10] },
+        { '2E': [PALOS.ESPADA, 2, 12, 9] },
+        { '2B': [PALOS.BASTO, 2, 12, 9] },
+        { '2O': [PALOS.ORO, 2, 12, 9] },
+        { '2C': [PALOS.COPA, 2, 12, 9] },
+        { '1O': [PALOS.ORO, 1, 11, 8] },
+        { '1C': [PALOS.COPA, 1, 11, 8] },
+        { '12E': [PALOS.ESPADA, 12, 10, 7] },
+        { '12B': [PALOS.BASTO, 12, 10, 7] },
+        { '12O': [PALOS.ORO, 12, 10, 7] },
+        { '12C': [PALOS.COPA, 12, 10, 7] },
+        { '11E': [PALOS.ESPADA, 11, 10, 6] },
+        { '11B': [PALOS.BASTO, 11, 10, 6] },
+        { '11O': [PALOS.ORO, 11, 10, 6] },
+        { '11C': [PALOS.COPA, 11, 10, 6] },
+        { '10E': [PALOS.ESPADA, 10, 10, 5] },
+        { '10B': [PALOS.BASTO, 10, 10, 5] },
+        { '10O': [PALOS.ORO, 10, 10, 5] },
+        { '10C': [PALOS.COPA, 10, 10, 5] },
+        { '7B': [PALOS.BASTO, 7, 17, 4] },
+        { '7C': [PALOS.COPA, 7, 17, 4] },
+        { '6E': [PALOS.ESPADA, 6, 16, 3] },
+        { '6B': [PALOS.BASTO, 6, 16, 3] },
+        { '6O': [PALOS.ORO, 6, 16, 3] },
+        { '6C': [PALOS.COPA, 6, 16, 3] },
+        { '5E': [PALOS.ESPADA, 5, 15, 2] },
+        { '5B': [PALOS.BASTO, 5, 15, 2] },
+        { '5O': [PALOS.ORO, 5, 15, 2] },
+        { '5C': [PALOS.COPA, 5, 15, 2] },
+        { '4E': [PALOS.ESPADA, 4, 14, 1] },
+        { '4B': [PALOS.BASTO, 4, 14, 1] },
+        { '4O': [PALOS.ORO, 4, 14, 1] },
+        { '4C': [PALOS.COPA, 4, 14, 1] },
+      ];
+      const MODES = {
+        FIRST_HAND: 'first-hand',
+        SECOND_HAND: 'second-hand',
+        THIRD_HAND: 'third-hand',
+        PLAYER_START: 'player-start',
+        GAME_OVER: 'game-over',
+      };
+      const MAX_SCORE = 15;
+      const RESTRICTIONS = {
+        NO_RESTRICTION: 'no-restriction',
+        FIRST_HAND: MODES.FIRST_HAND,
+      };
+      const VALUES = {
+        ENVIDO: {
+          QUERIDO: 2,
+          NO_QUERIDO: 1,
+          RESTRICCION: RESTRICTIONS.FIRST_HAND,
+        },
+        TRUCO: {
+          QUERIDO: 2,
+          NO_QUERIDO: 1,
+          RESTRICCION: RESTRICTIONS.NO_RESTRICTION,
+        },
+      };
+      const HEIGHT_CARD = 80;
+      const WIDTH_CARD = 60;
+
+      // STATE
+      let playerCardsPlayed = [];
+      let botCardsPlayed = [];
+      let cardsCurrentHand = [];
+      let playerHand = [];
+      let botHand = [];
+      let mode, playerScore, botScore, roundAccumulator, startPlayer;
+
+      function initializeGameState() {
+        playerScore = 0;
+        botScore = 0;
+        roundAccumulator = 0;
+        startPlayer = Math.floor(Math.random() * 2) === 0 ? 'player' : 'bot';
+
+        playerCardsPlayed = [];
+        botCardsPlayed = [];
+        cardsCurrentHand = [];
+        mode = MODES.FIRST_HAND;
+
+        mezclar();
+
+        console.log(cardsCurrentHand, playerHand, botHand);
+      }
+
+      function draw() {
+        if (mode === MODES.GAME_OVER) return;
+
+        drawCards();
+
+        window.requestAnimationFrame(draw);
+      }
+
+      function restart() {
+        initializeGameState();
+        draw();
+      }
+
+      function playCard(index) {
+        if (startPlayer === 'player') {
+          const jugadaBot = Math.floor(Math.random() * 3);
+
+          const cartaJugadaBot = botHand[jugadaBot];
+          const cartaJugadaPlayer = playerHand[index];
+          console.log(Object.values(cartaJugadaBot)[0][3], cartaJugadaPlayer);
+
+          const valorTrucoBot = Object.values(cartaJugadaBot)[0][3];
+          const valorTrucoPlayer = Object.values(cartaJugadaPlayer)[0][3];
+
+          if (valorTrucoPlayer > valorTrucoBot) {
+            console.log('Gano el jugador');
+          } else if (valorTrucoBot > valorTrucoPlayer) {
+            console.log('Gano el bot');
+          } else {
+            console.log("Empate");
+          }
+        }
+      }
+
+      document.addEventListener('click', (event, i) => {
+        if (mode === MODES.GAME_OVER) return;
+
+        const { clientX, clientY } = event;
+
+        const xWithinCanvas = clientX - canvasRect.left;
+        const yWithinCanvas = clientY - canvasRect.top;
+
+        if (
+          xWithinCanvas >= 0 &&
+          xWithinCanvas <= canvasRect.width &&
+          yWithinCanvas >= 0 &&
+          yWithinCanvas <= canvasRect.height
+        ) {
+          const clickedCardIndex = playerHand.findIndex((card, index) => {
+            const cardX = card.x;
+            const cardY = card.y - HEIGHT_CARD;
+            const cardWidth = WIDTH_CARD;
+            const cardHeight = HEIGHT_CARD;
+
+            return (
+              xWithinCanvas >= cardX &&
+              xWithinCanvas <= cardX + cardWidth &&
+              yWithinCanvas >= cardY &&
+              yWithinCanvas <= cardY + cardHeight
+            );
+          });
+
+          if (clickedCardIndex !== -1) {
+            playCard(clickedCardIndex);
+          }
+        }
+      });
+
+      function drawCards() {
+        drawPlayerCards();
+        drawBotCards();
+      }
+
+      function drawPlayerCards() {
+        playerHand.forEach((card, i) => {
+          context.fillStyle = 'white';
+          context.fillRect(
+            card.x,
+            card.y - HEIGHT_CARD,
+            WIDTH_CARD,
+            HEIGHT_CARD
+          );
+
+          context.fillStyle = 'black';
+          context.font = '16px Arial';
+          context.fillText(
+            `${Object.values(card)[0][1]} ${Object.values(card)[0][0]}`,
+            card.x,
+            card.y - HEIGHT_CARD / 2 + 8
+          );
+        });
+      }
+
+      function drawBotCards() {
+        botHand.forEach((card, i) => {
+          context.fillStyle = 'white';
+          context.fillRect(card.x, card.y, WIDTH_CARD, HEIGHT_CARD);
+
+          context.fillStyle = 'black';
+          context.font = '16px Arial';
+          context.fillText(
+            `${Object.values(card)[0][1]}${Object.values(card)[0][0]}`,
+            card.x,
+            card.y + HEIGHT_CARD / 2 + 8
+          );
+        });
+      }
+
+      function mezclar() {
+        for (let i = 0; i < 6; i++) {
+          const random = Math.floor(Math.random() * CARDS.length);
+
+          const cardGenerated = CARDS[random];
+
+          if (playerHand.length === 3) {
+            botHand.push({
+              ...cardGenerated,
+              x: canvas.width / 2 - WIDTH_CARD * (i - 4),
+              y: 100,
+            });
+            cardsCurrentHand.push({
+              ...cardGenerated,
+              x: canvas.width / 2 - WIDTH_CARD * (i + 4),
+              y: 100,
+            });
+          } else {
+            playerHand.push({
+              ...cardGenerated,
+              x: canvas.width / 2 - WIDTH_CARD * i,
+              y: 400,
+            });
+            cardsCurrentHand.push({
+              ...cardGenerated,
+              x: canvas.width / 2 - WIDTH_CARD * i,
+              y: 400,
+            });
+          }
+        }
+      }
+
+      restart();
+    </script>
+  </head>
+  <body>
+    <div>
+      <span>Jugador: <span id="player-score">0</span></span>
+      <span>Bot: <span id="bot-score">0</span></span>
+    </div>
+    <canvas
+      id="canvas"
+      height="500"
+      width="500"
+    ></canvas>
+  </body>
+</html>
