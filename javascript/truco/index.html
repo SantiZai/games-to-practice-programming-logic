@@ -47,6 +47,10 @@
       const $playerScore = document.querySelector('#player-score');
       const $botScore = document.querySelector('#bot-score');
 
+      const $envidoButton = document.querySelector('#envido');
+      const $trucoButton = document.querySelector('#truco');
+      const $mazoButton = document.querySelector('#mazo');
+
       // CONSTANTS
       const PALOS = {
         ESPADA: 'espada',
@@ -101,7 +105,7 @@
         FIRST_HAND: 'first-hand',
         SECOND_HAND: 'second-hand',
         THIRD_HAND: 'third-hand',
-        PLAYER_START: 'player-start',
+        ADD_POINTS: 'add-points',
         GAME_OVER: 'game-over',
       };
       const MAX_SCORE = 15;
@@ -130,13 +134,25 @@
       let cardsCurrentHand = [];
       let playerHand = [];
       let botHand = [];
-      let mode, playerScore, botScore, roundAccumulator, startPlayer;
+      let mode,
+        playerScore,
+        botScore,
+        envidoAccumulator,
+        trucoAccumulator,
+        winnerFirstHand,
+        winnerSecondHand,
+        winner,
+        turn;
 
       function initializeGameState() {
         playerScore = 0;
         botScore = 0;
-        roundAccumulator = 0;
-        startPlayer = Math.floor(Math.random() * 2) === 0 ? 'player' : 'bot';
+        envidoAccumulator = 0;
+        trucoAccumulator = 0;
+        winnerFirstHand = null;
+        winnerSecondHand = null;
+        winner = null;
+        turn = Math.floor(Math.random() * 2) === 0 ? 'player' : 'bot';
 
         playerCardsPlayed = [];
         botCardsPlayed = [];
@@ -144,14 +160,20 @@
         mode = MODES.FIRST_HAND;
 
         mezclar();
-
-        console.log(cardsCurrentHand, playerHand, botHand);
       }
 
       function draw() {
         if (mode === MODES.GAME_OVER) return;
 
-        drawCards();
+        // Limpia el canvas antes de redibujar
+        context.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Redibuja las cartas
+        drawPlayerCards(playerHand);
+        drawBotCards(botHand);
+
+        $playerScore.innerText = playerScore;
+        $botScore.innerText = botScore;
 
         window.requestAnimationFrame(draw);
       }
@@ -159,70 +181,208 @@
       function restart() {
         initializeGameState();
         draw();
+        play();
       }
 
-      function playCard(index) {
-        if (startPlayer === 'player') {
-          const jugadaBot = Math.floor(Math.random() * 3);
+      $envidoButton.addEventListener('click', () => {
+        envidoAccumulator++;
 
-          const cartaJugadaBot = botHand[jugadaBot];
-          const cartaJugadaPlayer = playerHand[index];
-          console.log(Object.values(cartaJugadaBot)[0][3], cartaJugadaPlayer);
+        const envidoQuerido = Math.floor(Math.random() * 2) === 1;
 
-          const valorTrucoBot = Object.values(cartaJugadaBot)[0][3];
-          const valorTrucoPlayer = Object.values(cartaJugadaPlayer)[0][3];
-
-          if (valorTrucoPlayer > valorTrucoBot) {
-            console.log('Gano el jugador');
-          } else if (valorTrucoBot > valorTrucoPlayer) {
-            console.log('Gano el bot');
-          } else {
-            console.log("Empate");
+        if (envidoQuerido) {
+          envidoAccumulator++;
+          const ganador = compararTantos();
+          if (ganador === 'player') {
+            playerScore += envidoAccumulator;
+          } else if (ganador === 'bot') {
+            botScore += envidoAccumulator;
           }
+        } else {
+          playerScore += envidoAccumulator;
+        }
+
+        $envidoButton.disabled = true;
+      });
+
+      function compararTantos() {
+        //TODO comparar tantos
+        //TODO hacer logica si hay empate de tantos
+      }
+
+      function play() {
+        if (mode === MODES.GAME_OVER) return
+
+        if (
+          (mode === MODES.FIRST_HAND &&
+            playerCardsPlayed.length === 1 &&
+            botCardsPlayed.length === 1) ||
+          (mode === MODES.SECOND_HAND &&
+            playerCardsPlayed.length === 2 &&
+            botCardsPlayed.length === 2) ||
+          (mode === MODES.THIRD_HAND &&
+            playerCardsPlayed.length === 3 &&
+            botCardsPlayed.length === 3)
+        ) {
+          const handWinner = verifyHandWinner();
+
+          if (handWinner === 'parda') {
+            if (mode != MODES.FIRST_HAND) {
+              if (winnerFirstHand != null) {
+                winner = winnerFirstHand;
+              } else {
+                winner = winnerSecondHand;
+              }
+            }
+          }
+
+          if (mode === MODES.FIRST_HAND) {
+            winnerFirstHand = handWinner;
+          } else if (mode === MODES.SECOND_HAND) {
+            winnerSecondHand = handWinner;
+          } else {
+            winner = handWinner;
+          }
+
+          const newTurn = handWinner === 'player' ? 'player' : 'bot';
+          turn = newTurn;
+
+          verifyWinner();
+
+          if (winner == null) siguienteMano();
+        }
+
+        if (turn === 'player') {
+          document.addEventListener('click', handlePlayerClick);
+        } else {
+          playBotTurn();
         }
       }
 
-      document.addEventListener('click', (event, i) => {
-        if (mode === MODES.GAME_OVER) return;
+      function playBotTurn() {
+        const jugadaBot = Math.floor(Math.random() * botHand.length);
 
+        const cartaJugadaBot = botHand[jugadaBot];
+
+        botCardsPlayed.push(cartaJugadaBot);
+        botHand.splice(jugadaBot, 1);
+
+        turn = 'player';
+
+        drawBotCards(botHand);
+
+        play();
+      }
+
+      function handlePlayerClick(event) {
         const { clientX, clientY } = event;
-
         const xWithinCanvas = clientX - canvasRect.left;
         const yWithinCanvas = clientY - canvasRect.top;
 
-        if (
-          xWithinCanvas >= 0 &&
-          xWithinCanvas <= canvasRect.width &&
-          yWithinCanvas >= 0 &&
-          yWithinCanvas <= canvasRect.height
-        ) {
-          const clickedCardIndex = playerHand.findIndex((card, index) => {
-            const cardX = card.x;
-            const cardY = card.y - HEIGHT_CARD;
-            const cardWidth = WIDTH_CARD;
-            const cardHeight = HEIGHT_CARD;
+        const clickedCardIndex = playerHand.findIndex((card, index) => {
+          const cardX = card.x;
+          const cardY = card.y - HEIGHT_CARD;
+          const cardWidth = WIDTH_CARD;
+          const cardHeight = HEIGHT_CARD;
 
-            return (
-              xWithinCanvas >= cardX &&
-              xWithinCanvas <= cardX + cardWidth &&
-              yWithinCanvas >= cardY &&
-              yWithinCanvas <= cardY + cardHeight
-            );
-          });
+          return (
+            xWithinCanvas >= cardX &&
+            xWithinCanvas <= cardX + cardWidth &&
+            yWithinCanvas >= cardY &&
+            yWithinCanvas <= cardY + cardHeight
+          );
+        });
 
-          if (clickedCardIndex !== -1) {
-            playCard(clickedCardIndex);
-          }
+        if (clickedCardIndex !== -1) {
+          playPlayerTurn(clickedCardIndex);
         }
-      });
-
-      function drawCards() {
-        drawPlayerCards();
-        drawBotCards();
       }
 
-      function drawPlayerCards() {
-        playerHand.forEach((card, i) => {
+      function playPlayerTurn(index) {
+        const cartaJugadaPlayer = playerHand[index];
+
+        playerCardsPlayed.push(cartaJugadaPlayer);
+        playerHand.splice(index, 1);
+
+        turn = 'bot';
+
+        drawPlayerCards(playerHand);
+
+        play();
+      }
+
+      function verifyHandWinner() {
+        const playerPlayed = Object.values(
+          playerCardsPlayed[playerCardsPlayed.length - 1]
+        )[0];
+        const botPlayed = Object.values(
+          botCardsPlayed[botCardsPlayed.length - 1]
+        )[0];
+
+        const valorTrucoPlayer = playerPlayed[3];
+        const valorTrucoBot = botPlayed[3];
+
+        if (valorTrucoPlayer > valorTrucoBot) {
+          return 'player';
+        } else if (valorTrucoBot > valorTrucoPlayer) {
+          return 'bot';
+        } else {
+          return 'parda';
+        }
+      }
+
+      function verifyWinner() {
+        if (mode !== MODES.FIRST_HAND && winnerFirstHand === winnerSecondHand) {
+          winner = winnerFirstHand;
+          mode = MODES.ADD_POINTS;
+        } else if (
+          playerCardsPlayed.length === 3 &&
+          botCardsPlayed.length === 3
+        ) {
+          const winnerHand = verifyHandWinner();
+          if (winnerHand === 'parda') {
+            winner = winnerFirstHand;
+          } else {
+            winner = winnerHand;
+          }
+          mode = MODES.ADD_POINTS;
+        }
+        if (winner != null) addPoints();
+      }
+
+      function addPoints() {
+        context.clearRect(0, 0, canvas.width, canvas.height)
+        drawCards()
+        //TODO agregar puntos
+        winner === 'player'
+          ? ($playerScore.innerText = 2)
+          : ($botScore.innerText = 2);
+        mode = MODES.GAME_OVER
+      }
+
+      function siguienteMano() {
+        switch (mode) {
+          case MODES.FIRST_HAND:
+            mode = MODES.SECOND_HAND;
+            break;
+          case MODES.SECOND_HAND:
+            mode = MODES.THIRD_HAND;
+            break;
+          case MODES.THIRD_HAND:
+            mode = MODES.ADD_POINTS;
+            break;
+          case MODES.ADD_POINTS:
+            mode = MODES.GAME_OVER;
+            break;
+        }
+      }
+
+      function drawCards() {
+        drawPlayerCards(playerHand);
+        drawBotCards(botHand);
+      }
+
+      function drawPlayerCards(hand) {
+        hand.forEach((card) => {
           context.fillStyle = 'white';
           context.fillRect(
             card.x,
@@ -239,10 +399,28 @@
             card.y - HEIGHT_CARD / 2 + 8
           );
         });
+
+        playerCardsPlayed.forEach((card) => {
+          context.fillStyle = 'gray';
+          context.fillRect(
+            card.x,
+            card.y - HEIGHT_CARD * 2,
+            WIDTH_CARD,
+            HEIGHT_CARD
+          );
+
+          context.fillStyle = 'black';
+          context.font = '16px Arial';
+          context.fillText(
+            `${Object.values(card)[0][1]} ${Object.values(card)[0][0]}`,
+            card.x,
+            card.y - HEIGHT_CARD * 2 + HEIGHT_CARD / 2
+          );
+        });
       }
 
-      function drawBotCards() {
-        botHand.forEach((card, i) => {
+      function drawBotCards(hand) {
+        hand.forEach((card) => {
           context.fillStyle = 'white';
           context.fillRect(card.x, card.y, WIDTH_CARD, HEIGHT_CARD);
 
@@ -252,6 +430,24 @@
             `${Object.values(card)[0][1]}${Object.values(card)[0][0]}`,
             card.x,
             card.y + HEIGHT_CARD / 2 + 8
+          );
+        });
+
+        botCardsPlayed.forEach((card) => {
+          context.fillStyle = 'gray';
+          context.fillRect(
+            card.x,
+            card.y + HEIGHT_CARD,
+            WIDTH_CARD,
+            HEIGHT_CARD
+          );
+
+          context.fillStyle = 'black';
+          context.font = '16px Arial';
+          context.fillText(
+            `${Object.values(card)[0][1]} ${Object.values(card)[0][0]}`,
+            card.x,
+            card.y + HEIGHT_CARD * 2 - HEIGHT_CARD / 2
           );
         });
       }
@@ -301,5 +497,10 @@
       height="500"
       width="500"
     ></canvas>
+    <div class="container-cantos">
+      <button id="envido">Envido</button>
+      <button id="truco">Truco</button>
+      <button id="mazo">Me voy al mazo</button>
+    </div>
   </body>
 </html>
